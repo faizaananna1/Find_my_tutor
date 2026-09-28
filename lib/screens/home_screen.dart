@@ -8,13 +8,9 @@ import 'package:findmytutor/widgets/section_header.dart';
 import 'package:findmytutor/backend/models/subject_model.dart';
 import 'package:findmytutor/backend/models/tutor_model.dart';
 import 'package:findmytutor/backend/services/tutor_service.dart';
+import 'package:findmytutor/screens/tutor_detail_screen.dart';
 
 /// The main home screen of the FindMyTutor app.
-///
-/// Displays:
-/// - A horizontally scrollable row of subject category icons
-/// - A recognition card highlighting an awarded tutor
-/// - A list of top tutor cards
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -24,17 +20,47 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final List<SubjectModel> _subjects;
-  late final List<TutorModel> _tutors;
+  late List<TutorModel> _filteredTutors;
   late final TutorModel? _recognizedTutor;
 
   int _selectedSubjectIndex = -1;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _subjects = TutorService.getSubjects();
-    _tutors = TutorService.getTutors();
+    _filteredTutors = TutorService.getTutors();
     _recognizedTutor = TutorService.getRecognizedTutor();
+    TutorService.initializeData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter() {
+    final selectedSubjectName = _selectedSubjectIndex != -1
+        ? _subjects[_selectedSubjectIndex].name
+        : null;
+
+    setState(() {
+      _filteredTutors = TutorService.searchTutors(
+        subject: selectedSubjectName,
+        query: _searchController.text.trim(),
+      );
+    });
+  }
+
+  void _navigateToDetail(TutorModel tutor) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TutorDetailScreen(tutor: tutor),
+      ),
+    );
   }
 
   @override
@@ -48,32 +74,63 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Subject categories row ---
+              // Search Bar
+              TextField(
+                controller: _searchController,
+                onChanged: (_) => _applyFilter(),
+                decoration: InputDecoration(
+                  hintText: 'Search tutors or subjects...',
+                  prefixIcon: const Icon(Icons.search, color: AppColors.teal),
+                  filled: true,
+                  fillColor: AppColors.dark.withValues(alpha: 0.04),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Subject categories row
               _buildSubjectRow(),
               const SizedBox(height: 24),
 
-              // --- Recognition section ---
-              if (_recognizedTutor != null) ...[
+              // Recognition section
+              if (_recognizedTutor != null && _selectedSubjectIndex == -1) ...[
                 const SectionHeader(title: 'Recognition'),
-                RecognitionCard(tutor: _recognizedTutor),
+                GestureDetector(
+                  onTap: () => _navigateToDetail(_recognizedTutor),
+                  child: RecognitionCard(tutor: _recognizedTutor),
+                ),
                 const SizedBox(height: 24),
               ],
 
-              // --- Top tutors section ---
+              // Top tutors section
               SectionHeader(
-                title: 'Top Tutors',
-                onSeeAllPressed: () {
-                  // Placeholder for navigation
-                },
+                title: _selectedSubjectIndex != -1
+                    ? '${_subjects[_selectedSubjectIndex].name} Tutors'
+                    : 'Top Tutors',
               ),
-              ..._tutors.map(
-                (tutor) => TutorCard(
-                  tutor: tutor,
-                  onTap: () {
-                    // Placeholder for tutor detail navigation
-                  },
+              if (_filteredTutors.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      'No tutors found matching your search.',
+                      style: TextStyle(
+                        color: AppColors.dark.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ..._filteredTutors.map(
+                  (tutor) => TutorCard(
+                    tutor: tutor,
+                    onTap: () => _navigateToDetail(tutor),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -100,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedSubjectIndex =
                     _selectedSubjectIndex == index ? -1 : index;
               });
+              _applyFilter();
             },
           );
         },
